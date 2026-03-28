@@ -30,7 +30,53 @@ def section(title: str) -> None:
     print(f"== {title} ==")
 
 
-def run_cmd(cmd: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def format_cmd(cmd: list[str]) -> str:
+    rendered: list[str] = []
+    for part in cmd:
+        if part == str(sys.executable):
+            rendered.append("python")
+        elif part == str(SUPER_BIN):
+            rendered.append("super")
+        else:
+            try:
+                path = Path(part)
+                if path.is_absolute():
+                    try:
+                        rendered.append(str(path.relative_to(ROOT)))
+                    except ValueError:
+                        rendered.append(part)
+                else:
+                    rendered.append(part)
+            except Exception:
+                rendered.append(part)
+    return " ".join(rendered)
+
+
+def run_cmd(
+    cmd: list[str], *, cwd: Path | None = None, stream: bool = False
+) -> subprocess.CompletedProcess[str]:
+    if stream:
+        log(f"$ {format_cmd(cmd)}")
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(cwd) if cwd else None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        chunks: list[str] = []
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            print(line, end="")
+            chunks.append(line)
+        returncode = proc.wait()
+        return subprocess.CompletedProcess(
+            cmd,
+            returncode,
+            stdout="".join(chunks),
+            stderr="",
+        )
+
     return subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,
@@ -83,7 +129,10 @@ def preflight(with_superoptix: bool) -> None:
 
 def run_standalone(label: str, script_name: str) -> tuple[bool, str]:
     log(f"Running {label} via demo/{script_name}")
-    proc = run_cmd([sys.executable, str(ROOT / "demo" / script_name)])
+    proc = run_cmd(
+        [sys.executable, str(ROOT / "demo" / script_name)],
+        stream=True,
+    )
     output = (proc.stdout or "") + (proc.stderr or "")
     detail = line_for_output(output)
     log(f"{label}: {'PASS' if proc.returncode == 0 else 'FAIL'}")
@@ -94,7 +143,7 @@ def run_standalone(label: str, script_name: str) -> tuple[bool, str]:
 def ensure_workspace() -> None:
     if not WORKSPACE.exists():
         log(f"Initializing SuperOptiX workspace at {WORKSPACE.name}")
-        proc = run_cmd([str(SUPER_BIN), "init", WORKSPACE.name], cwd=ROOT)
+        proc = run_cmd([str(SUPER_BIN), "init", WORKSPACE.name], cwd=ROOT, stream=True)
         if proc.returncode != 0:
             raise RuntimeError((proc.stdout or "") + (proc.stderr or ""))
 
@@ -103,11 +152,19 @@ def ensure_agent(agent_name: str, framework: str) -> None:
     playbook_dir = PROJECT_PACKAGE_ROOT / "agents" / agent_name / "playbook"
     if not playbook_dir.exists():
         log(f"Pulling packaged agent {agent_name}")
-        proc = run_cmd([str(SUPER_BIN), "agent", "pull", agent_name, "--force"], cwd=WORKSPACE)
+        proc = run_cmd(
+            [str(SUPER_BIN), "agent", "pull", agent_name, "--force"],
+            cwd=WORKSPACE,
+            stream=True,
+        )
         if proc.returncode != 0:
             raise RuntimeError((proc.stdout or "") + (proc.stderr or ""))
     log(f"Compiling {agent_name} for {framework}")
-    proc = run_cmd([str(SUPER_BIN), "agent", "compile", agent_name, "--framework", framework], cwd=WORKSPACE)
+    proc = run_cmd(
+        [str(SUPER_BIN), "agent", "compile", agent_name, "--framework", framework],
+        cwd=WORKSPACE,
+        stream=True,
+    )
     if proc.returncode != 0:
         raise RuntimeError((proc.stdout or "") + (proc.stderr or ""))
 
@@ -127,6 +184,7 @@ def run_superoptix(label: str, agent_name: str, framework: str) -> tuple[bool, s
             "What is NEON-FOX-742?",
         ],
         cwd=WORKSPACE,
+        stream=True,
     )
     output = (proc.stdout or "") + (proc.stderr or "")
     detail = line_for_output(output)
