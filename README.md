@@ -4,9 +4,12 @@ A small standalone demo repo for trying TurboAgents outside the main source tree
 
 ## What this repo shows
 
+- TurboQuant-style compressed retrieval and reranking through TurboAgents
 - standalone TurboAgents with LanceDB
 - standalone TurboAgents with SurrealDB
 - optional SuperOptiX framework integrations using DSPy, Pydantic AI, and OpenAI Agents SDK
+
+In this repo, the TurboQuant part is the compressed vector path configured through the TurboAgents adapters. The demos use low-bit compressed indexes and rerank the candidate set before returning the final hits.
 
 ## Why the demo scripts are committed
 
@@ -49,7 +52,7 @@ uv sync
 uv run python scripts/run_demo.py
 ```
 
-That runs the standalone LanceDB and SurrealDB demos and writes a summary to `results/summary.md`.
+That runs the standalone LanceDB and SurrealDB demos, shows the TurboQuant-style compressed retrieval path in action, and writes a summary to `results/summary.md`.
 
 ## Optional SuperOptiX integrations
 

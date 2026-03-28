@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import socket
 import subprocess
 import sys
@@ -17,18 +18,39 @@ WORKSPACE = ROOT / "superoptix-demo-runtime"
 SUPER_BIN = ROOT / ".venv" / "bin" / "super"
 PROJECT_PACKAGE_ROOT = WORKSPACE / WORKSPACE.name
 
+RESET = "\033[0m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+BLUE = "\033[94m"
+CYAN = "\033[96m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+RED = "\033[91m"
+
+
+def style(text: str, *codes: str) -> str:
+    return "".join(codes) + text + RESET
+
 
 def stamp() -> str:
     return datetime.now().strftime("%H:%M:%S")
 
 
 def log(message: str) -> None:
-    print(f"[{stamp()}] {message}")
+    print(f"{style(f'[{stamp()}]', DIM)} {message}")
 
 
 def section(title: str) -> None:
     print()
-    print(f"== {title} ==")
+    print(style(f"== {title} ==", BOLD, BLUE))
+
+
+def status(label: str, ok: bool) -> str:
+    return style(label, BOLD, GREEN if ok else RED)
+
+
+def note(message: str) -> None:
+    print(style(message, YELLOW))
 
 
 def format_cmd(cmd: list[str]) -> str:
@@ -114,10 +136,11 @@ def check_ollama_model(model_name: str) -> bool:
 
 def preflight(with_superoptix: bool) -> None:
     section("Preflight")
+    note("Checking the local services required for this demo before we start.")
     surrealdb_ok = check_tcp("127.0.0.1", 8000)
     ollama_ok = check_tcp("127.0.0.1", 11434)
-    log(f"SurrealDB on :8000: {'OK' if surrealdb_ok else 'MISSING'}")
-    log(f"Ollama on :11434: {'OK' if ollama_ok else 'MISSING'}")
+    log(f"SurrealDB on :8000: {status('OK', surrealdb_ok) if surrealdb_ok else status('MISSING', False)}")
+    log(f"Ollama on :11434: {status('OK', ollama_ok) if ollama_ok else status('MISSING', False)}")
     if not surrealdb_ok:
         raise RuntimeError("SurrealDB is not reachable on 127.0.0.1:8000. Start Docker and your SurrealDB container first.")
     if with_superoptix:
@@ -125,36 +148,48 @@ def preflight(with_superoptix: bool) -> None:
             raise RuntimeError("Ollama is not reachable on 127.0.0.1:11434. Start Ollama first.")
         if not check_ollama_model("qwen3.5:9b"):
             raise RuntimeError("Ollama model qwen3.5:9b is not available. Pull it before using --with-superoptix.")
-        log("Ollama model qwen3.5:9b: OK")
+        log(f"Ollama model qwen3.5:9b: {status('OK', True)}")
+
+
+def reset_results() -> None:
+    if RESULTS_DIR.exists():
+        note("Resetting previous results so this run starts clean.")
+        shutil.rmtree(RESULTS_DIR)
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def run_standalone(label: str, script_name: str) -> tuple[bool, str]:
-    log(f"Running {label} via demo/{script_name}")
+    note(f"Next: run {label} with the TurboQuant-style compressed index path and print the top retrieval hits.")
+    log(f"{style('Running', BOLD, CYAN)} {label} via demo/{script_name}")
     proc = run_cmd(
         [sys.executable, str(ROOT / "demo" / script_name)],
         stream=True,
     )
     output = (proc.stdout or "") + (proc.stderr or "")
     detail = line_for_output(output)
-    log(f"{label}: {'PASS' if proc.returncode == 0 else 'FAIL'}")
-    print(detail)
+    log(f"{label}: {status('PASS', proc.returncode == 0) if proc.returncode == 0 else status('FAIL', False)}")
+    print(style(detail, YELLOW))
     return proc.returncode == 0, detail
 
 
 def ensure_workspace() -> None:
-    if not WORKSPACE.exists():
-        log(f"Initializing SuperOptiX workspace at {WORKSPACE.name}")
-        proc = run_cmd([str(SUPER_BIN), "init", WORKSPACE.name], cwd=ROOT, stream=True)
-        if proc.returncode != 0:
-            raise RuntimeError((proc.stdout or "") + (proc.stderr or ""))
+    if WORKSPACE.exists():
+        note("Resetting the previous runtime SuperOptiX workspace so compiled artifacts do not leak across runs.")
+        shutil.rmtree(WORKSPACE)
+    note("Next: create an isolated runtime SuperOptiX workspace without touching the checked-in reference output.")
+    log(f"{style('Initializing', BOLD, CYAN)} SuperOptiX workspace at {WORKSPACE.name}")
+    proc = run_cmd([str(SUPER_BIN), "init", WORKSPACE.name], cwd=ROOT, stream=True)
+    if proc.returncode != 0:
+        raise RuntimeError((proc.stdout or "") + (proc.stderr or ""))
     if REFERENCE_WORKSPACE.exists():
-        log(f"Reference generated code remains available in {REFERENCE_WORKSPACE.name}")
+        log(f"{style('Reference', BOLD, BLUE)} generated code remains available in {REFERENCE_WORKSPACE.name}")
 
 
 def ensure_agent(agent_name: str, framework: str) -> None:
     playbook_dir = PROJECT_PACKAGE_ROOT / "agents" / agent_name / "playbook"
     if not playbook_dir.exists():
-        log(f"Pulling packaged agent {agent_name}")
+        note(f"Next: pull the packaged {framework} demo agent into the runtime workspace.")
+        log(f"{style('Pulling', BOLD, CYAN)} packaged agent {agent_name}")
         proc = run_cmd(
             [str(SUPER_BIN), "agent", "pull", agent_name, "--force"],
             cwd=WORKSPACE,
@@ -162,7 +197,8 @@ def ensure_agent(agent_name: str, framework: str) -> None:
         )
         if proc.returncode != 0:
             raise RuntimeError((proc.stdout or "") + (proc.stderr or ""))
-    log(f"Compiling {agent_name} for {framework}")
+    note(f"Next: compile the {framework} pipeline so it is ready to run with TurboQuant-style TurboAgents-backed retrieval.")
+    log(f"{style('Compiling', BOLD, CYAN)} {agent_name} for {framework}")
     proc = run_cmd(
         [str(SUPER_BIN), "agent", "compile", agent_name, "--framework", framework],
         cwd=WORKSPACE,
@@ -174,7 +210,8 @@ def ensure_agent(agent_name: str, framework: str) -> None:
 
 def run_superoptix(label: str, agent_name: str, framework: str) -> tuple[bool, str]:
     ensure_agent(agent_name, framework)
-    log(f"Running {label} using {agent_name} ({framework})")
+    note(f"Next: run the {framework} demo and surface the grounded result produced through the TurboQuant-style retrieval path.")
+    log(f"{style('Running', BOLD, CYAN)} {label} using {agent_name} ({framework})")
     proc = run_cmd(
         [
             str(SUPER_BIN),
@@ -191,12 +228,13 @@ def run_superoptix(label: str, agent_name: str, framework: str) -> tuple[bool, s
     )
     output = (proc.stdout or "") + (proc.stderr or "")
     detail = line_for_output(output)
-    log(f"{label}: {'PASS' if proc.returncode == 0 else 'FAIL'}")
-    print(detail)
+    log(f"{label}: {status('PASS', proc.returncode == 0) if proc.returncode == 0 else status('FAIL', False)}")
+    print(style(detail, YELLOW))
     return proc.returncode == 0, detail
 
 
 def write_summary(results: list[tuple[str, bool, str]]) -> None:
+    note("Final step: write a short summary so the whole run is easy to review.")
     lines = [
         "# TurboAgents Demo Summary",
         "",
@@ -207,7 +245,7 @@ def write_summary(results: list[tuple[str, bool, str]]) -> None:
         lines.append(f"- {name}: {'passed' if ok else 'failed'}")
         lines.append(f"  - {detail}")
     SUMMARY.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    log(f"Wrote summary to {SUMMARY}")
+    log(f"{style('Summary', BOLD, GREEN)} written to {SUMMARY}")
 
 
 def main() -> None:
@@ -215,11 +253,11 @@ def main() -> None:
     parser.add_argument("--with-superoptix", action="store_true")
     args = parser.parse_args()
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     preflight(args.with_superoptix)
+    reset_results()
 
     section("TurboAgents Demo")
-    log("Starting standalone demo validation")
+    log("Starting standalone demo validation with the TurboQuant-style compressed retrieval path")
 
     results: list[tuple[str, bool, str]] = []
 
