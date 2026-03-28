@@ -15,7 +15,6 @@ RESULTS_DIR = ROOT / "results"
 SUMMARY = RESULTS_DIR / "summary.md"
 REFERENCE_WORKSPACE = ROOT / "superoptix-demo-workspace"
 WORKSPACE = ROOT / "superoptix-demo-runtime"
-SUPER_BIN = ROOT / ".venv" / "bin" / "super"
 PROJECT_PACKAGE_ROOT = WORKSPACE / WORKSPACE.name
 
 RESET = "\033[0m"
@@ -51,6 +50,26 @@ def status(label: str, ok: bool) -> str:
 
 def note(message: str) -> None:
     print(style(message, YELLOW))
+
+
+def resolve_super_bin() -> str:
+    candidates = [
+        Path(sys.executable).resolve().parent / "super",
+        ROOT / ".venv" / "bin" / "super",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    discovered = shutil.which("super")
+    if discovered:
+        return discovered
+    raise RuntimeError(
+        "Could not find the `super` CLI. Install the `superoptix` extra first with "
+        "`uv sync --extra superoptix`."
+    )
+
+
+SUPER_BIN = resolve_super_bin()
 
 
 def format_cmd(cmd: list[str]) -> str:
