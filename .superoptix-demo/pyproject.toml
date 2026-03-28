@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = ".superoptix-demo"
+version = "0.1.0"
+description = "An autonomous agent system powered by SuperOptiX"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"},
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = [
+    
+]
+
+[project.optional-dependencies]
+
+
+[project.urls]
+Homepage = "https://github.com/yourusername/.superoptix-demo"
+Repository = "https://github.com/yourusername/.superoptix-demo.git"
+"Bug Tracker" = "https://github.com/yourusername/.superoptix-demo/issues"
+
+[project.scripts]
+.superoptix-demo = ".superoptix-demo.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = [".superoptix-demo"]
+
+[tool.hatch.build.targets.wheel.sources]
+".superoptix-demo" = ".superoptix-demo"
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"

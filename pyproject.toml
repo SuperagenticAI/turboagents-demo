@@ -8,5 +8,10 @@ dependencies = [
   "turboagents[rag]>=0.1.0a2",
 ]
 
+[project.optional-dependencies]
+superoptix = [
+  "superoptix[turboagents,frameworks-openai,frameworks-pydantic-ai]>=0.2.23",
+]
+
 [tool.uv]
 package = false

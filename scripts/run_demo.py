@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import argparse
-import os
+import json
+import socket
 import subprocess
 import sys
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = ROOT / "results"
 SUMMARY = RESULTS_DIR / "summary.md"
+WORKSPACE = ROOT / "superoptix-demo-workspace"
+SUPER_BIN = ROOT / ".venv" / "bin" / "super"
+PROJECT_PACKAGE_ROOT = WORKSPACE / WORKSPACE.name
 
 
 def stamp() -> str:
@@ -25,11 +30,10 @@ def section(title: str) -> None:
     print(f"== {title} ==")
 
 
-def run_cmd(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def run_cmd(cmd: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,
-        env=env,
         capture_output=True,
         text=True,
     )
@@ -44,13 +48,37 @@ def line_for_output(output: str) -> str:
     return lines[-1] if lines else "no output"
 
 
-def require_env_path(name: str) -> Path:
-    value = os.environ.get(name, "").strip()
-    if not value:
-        raise RuntimeError(
-            f"Missing required environment variable {name}. Set it before using --with-superoptix."
-        )
-    return Path(value).expanduser().resolve()
+def check_tcp(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=1.5):
+            return True
+    except OSError:
+        return False
+
+
+def check_ollama_model(model_name: str) -> bool:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=2) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return False
+    return any(model.get("name") == model_name for model in data.get("models", []))
+
+
+def preflight(with_superoptix: bool) -> None:
+    section("Preflight")
+    surrealdb_ok = check_tcp("127.0.0.1", 8000)
+    ollama_ok = check_tcp("127.0.0.1", 11434)
+    log(f"SurrealDB on :8000: {'OK' if surrealdb_ok else 'MISSING'}")
+    log(f"Ollama on :11434: {'OK' if ollama_ok else 'MISSING'}")
+    if not surrealdb_ok:
+        raise RuntimeError("SurrealDB is not reachable on 127.0.0.1:8000. Start Docker and your SurrealDB container first.")
+    if with_superoptix:
+        if not ollama_ok:
+            raise RuntimeError("Ollama is not reachable on 127.0.0.1:11434. Start Ollama first.")
+        if not check_ollama_model("qwen3.5:9b"):
+            raise RuntimeError("Ollama model qwen3.5:9b is not available. Pull it before using --with-superoptix.")
+        log("Ollama model qwen3.5:9b: OK")
 
 
 def run_standalone(label: str, script_name: str) -> tuple[bool, str]:
@@ -63,19 +91,33 @@ def run_standalone(label: str, script_name: str) -> tuple[bool, str]:
     return proc.returncode == 0, detail
 
 
+def ensure_workspace() -> None:
+    if not WORKSPACE.exists():
+        log(f"Initializing SuperOptiX workspace at {WORKSPACE.name}")
+        proc = run_cmd([str(SUPER_BIN), "init", WORKSPACE.name], cwd=ROOT)
+        if proc.returncode != 0:
+            raise RuntimeError((proc.stdout or "") + (proc.stderr or ""))
+
+
+def ensure_agent(agent_name: str, framework: str) -> None:
+    playbook_dir = PROJECT_PACKAGE_ROOT / "agents" / agent_name / "playbook"
+    if not playbook_dir.exists():
+        log(f"Pulling packaged agent {agent_name}")
+        proc = run_cmd([str(SUPER_BIN), "agent", "pull", agent_name, "--force"], cwd=WORKSPACE)
+        if proc.returncode != 0:
+            raise RuntimeError((proc.stdout or "") + (proc.stderr or ""))
+    log(f"Compiling {agent_name} for {framework}")
+    proc = run_cmd([str(SUPER_BIN), "agent", "compile", agent_name, "--framework", framework], cwd=WORKSPACE)
+    if proc.returncode != 0:
+        raise RuntimeError((proc.stdout or "") + (proc.stderr or ""))
+
+
 def run_superoptix(label: str, agent_name: str, framework: str) -> tuple[bool, str]:
-    superoptix_root = require_env_path("SUPEROPTIX_ROOT")
-    turboagents_root = require_env_path("TURBOAGENTS_ROOT")
-    validation_root = require_env_path("SUPEROPTIX_VALIDATION_ROOT")
-    env = os.environ.copy()
-    env["PYTHONPATH"] = f"{superoptix_root}:{turboagents_root}"
-    python = superoptix_root / ".venv" / "bin" / "python"
+    ensure_agent(agent_name, framework)
     log(f"Running {label} using {agent_name} ({framework})")
     proc = run_cmd(
         [
-            str(python),
-            "-m",
-            "superoptix.cli.main",
+            str(SUPER_BIN),
             "agent",
             "run",
             agent_name,
@@ -84,8 +126,7 @@ def run_superoptix(label: str, agent_name: str, framework: str) -> tuple[bool, s
             "--goal",
             "What is NEON-FOX-742?",
         ],
-        cwd=validation_root,
-        env=env,
+        cwd=WORKSPACE,
     )
     output = (proc.stdout or "") + (proc.stderr or "")
     detail = line_for_output(output)
@@ -114,6 +155,7 @@ def main() -> None:
     args = parser.parse_args()
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    preflight(args.with_superoptix)
 
     section("TurboAgents Demo")
     log("Starting standalone demo validation")
@@ -131,6 +173,7 @@ def main() -> None:
     if args.with_superoptix:
         section("SuperOptiX Integrations")
         log("Starting framework integration validation")
+        ensure_workspace()
         for name, agent, framework in [
             ("SuperOptiX DSPy", "rag_surrealdb_dspy_demo", "dspy"),
             ("SuperOptiX Pydantic AI", "rag_surrealdb_pydanticai_demo", "pydantic-ai"),

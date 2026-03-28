@@ -1,0 +1,245 @@
+"""
+RagSurrealdbPydanticaiDemo Agent - Pydantic AI Native Minimal Pipeline
+
+Auto-generated from SuperSpec playbook using SuperOptiX compiler.
+Framework: Pydantic AI
+Generated: 2026-03-28 13:33:18
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+import inspect
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+from pydantic import BaseModel, Field
+
+try:
+    from pydantic_ai import Agent
+    from pydantic_ai.settings import ModelSettings
+except ImportError as e:
+    raise ImportError("pydantic-ai is required. Install with: pip install pydantic-ai") from e
+
+from superoptix.runners.pydantic_runtime_helpers import (
+    build_stackone_tools as superoptix_build_stackone_tools,
+    build_instructions as superoptix_build_instructions,
+    get_pydantic_rlm_config as superoptix_get_pydantic_rlm_config,
+    run_agent_with_optional_rlm as superoptix_run_agent_with_optional_rlm,
+    resolve_model as superoptix_resolve_model,
+)
+from superoptix.core.rag_mixin import RAGMixin
+
+COMPILED_SPEC_PATH = Path(__file__).resolve().parent / "rag_surrealdb_pydanticai_demo_pydantic_ai_pipeline_compiled_spec.json"
+def _load_compiled_spec(path: Path) -> Dict[str, Any]:
+    try:
+        with path.open("r", encoding="utf-8") as _spec_file:
+            return json.load(_spec_file)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"Compiled spec file not found at {path}. Recompile this agent to regenerate pipeline artifacts."
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Compiled spec file is invalid JSON at {path}. Recompile this agent to regenerate pipeline artifacts."
+        ) from exc
+
+
+FULL_SPEC = _load_compiled_spec(COMPILED_SPEC_PATH)
+
+INSTRUCTION_SPEC = {
+    "persona": dict(FULL_SPEC.get("persona", {}) or {}),
+    "tasks": list(FULL_SPEC.get("tasks", []) or []),
+}
+LANGUAGE_MODEL = dict(FULL_SPEC.get("language_model", {}) or {})
+
+
+
+
+class RagSurrealdbPydanticaiDemoPipeline:
+    """
+    Native Pydantic AI pipeline.
+
+    Style intentionally follows Pydantic AI docs:
+    - create Agent(model=..., instructions=..., output_type=...)
+    - run with await agent.run(prompt)
+    """
+
+    def __init__(
+        self,
+        model_name: Optional[str] = None,
+        instructions: Optional[str] = None,
+        model_config: Optional[Dict[str, Any]] = None,
+    ):
+        resolved_model = model_name or superoptix_resolve_model(
+            LANGUAGE_MODEL, model_config=model_config
+        )
+        lm_cfg = dict(LANGUAGE_MODEL or {})
+        run_cfg = dict(model_config or {})
+        temperature = run_cfg.get("temperature", lm_cfg.get("temperature", 0.1))
+        max_tokens = run_cfg.get("max_tokens", lm_cfg.get("max_tokens", 1800))
+        top_p = run_cfg.get("top_p", lm_cfg.get("top_p", 1.0))
+        resolved_instructions = instructions or superoptix_build_instructions(
+            INSTRUCTION_SPEC
+        )
+        self._resolved_model = resolved_model
+        self._resolved_instructions = resolved_instructions
+        self._rlm_config = superoptix_get_pydantic_rlm_config(FULL_SPEC)
+        self._model_settings = ModelSettings(
+            temperature=temperature,
+            max_tokens=max_tokens,
+            top_p=top_p,
+        )
+        agent_kwargs: Dict[str, Any] = {
+            "model": resolved_model,
+            "instructions": resolved_instructions,
+            "name": "rag_surreal_db_pydantic_ai_demo",
+            "model_settings": self._model_settings,
+        }
+        try:
+            retries = int(os.getenv("SUPEROPTIX_PYDANTIC_RETRIES", "3"))
+        except Exception:
+            retries = 3
+        init_params = inspect.signature(Agent.__init__).parameters
+        if "retries" in init_params:
+            agent_kwargs["retries"] = retries
+        if "output_retries" in init_params:
+            agent_kwargs["output_retries"] = retries
+        stackone_tools = superoptix_build_stackone_tools(FULL_SPEC, framework="pydantic_ai")
+        if stackone_tools:
+            agent_kwargs["tools"] = stackone_tools
+            print(f"✅ StackOne tools registered: {len(stackone_tools)}")
+        else:
+            print("ℹ️  No StackOne tools configured")
+        self.agent = Agent(**agent_kwargs)
+        self._tool_count = len(stackone_tools or [])
+        if self._rlm_config.get("enabled", False):
+            print(
+                "✅ RLM configured "
+                f"(mode={self._rlm_config.get('mode', 'assist')}, "
+                f"backend={self._rlm_config.get('backend', 'litellm')})"
+            )
+        self._rag_enabled = False
+        self._rag_helper = None
+        try:
+            rag_cfg = FULL_SPEC.get("rag", {}) or {}
+            retrieval_cfg = FULL_SPEC.get("retrieval", {}) or {}
+            cfg = rag_cfg if isinstance(rag_cfg, dict) and rag_cfg else retrieval_cfg
+            if isinstance(cfg, dict) and bool(cfg.get("enabled", False)):
+                class _RunnerRAGHelper(RAGMixin):
+                    pass
+
+                helper = _RunnerRAGHelper()
+                self._rag_enabled = bool(helper.setup_rag(FULL_SPEC))
+                self._rag_helper = helper if self._rag_enabled else None
+                if self._rag_enabled:
+                    print("🔍 RAG retrieval enabled (runner-managed).")
+        except Exception as _rag_exc:
+            print(f"⚠️ RAG init skipped: {_rag_exc}")
+
+    async def _retrieve_context_text(self, query: str) -> str:
+        if not self._rag_enabled or not self._rag_helper:
+            return ""
+        try:
+            rag_cfg = FULL_SPEC.get("rag", {}) or {}
+            retrieval_cfg = FULL_SPEC.get("retrieval", {}) or {}
+            cfg = rag_cfg if isinstance(rag_cfg, dict) and rag_cfg else retrieval_cfg
+            top_k = int((cfg.get("config", {}) or {}).get("top_k", 3))
+            docs = await self._rag_helper.retrieve_context(query, top_k=top_k)
+            if not docs:
+                return ""
+            return "\n\n".join(str(doc) for doc in docs if doc)
+        except Exception as _rag_query_exc:
+            print(f"⚠️ RAG retrieval skipped: {_rag_query_exc}")
+            return ""
+
+    async def run(self, query: Optional[str] = None, **inputs: Any) -> Dict[str, Any]:
+        if query is None:
+            query = str(inputs.get("knowledge_query", ""))
+        prompt = query or ""
+        context_text = await self._retrieve_context_text(prompt)
+        if context_text:
+            prompt = (
+                "Use the retrieved context to answer. If context is insufficient, say so briefly.\n\n"
+                f"Retrieved context:\n{context_text}\n\n"
+                f"User query:\n{query or ''}"
+            )
+        started = time.time()
+        preview = (prompt[:120] + "...") if len(prompt) > 120 else prompt
+        print(f"🧠 Pydantic AI run start | model={self._resolved_model} | tools={self._tool_count}")
+        print(f"📝 Prompt: {preview}")
+        try:
+            result = await superoptix_run_agent_with_optional_rlm(
+                agent=self.agent,
+                prompt=prompt,
+                spec_data=FULL_SPEC,
+                model_name=self._resolved_model,
+                logfire_enabled=bool((FULL_SPEC.get("logfire", {}) or {}).get("enabled", True)),
+            )
+        except Exception as exc:
+            err = str(exc)
+            if "output validation" in err.lower():
+                print("⚠️ Structured output validation failed. Retrying once in plain-text mode.")
+                try:
+                    fallback_agent_kwargs: Dict[str, Any] = {
+                        "model": self._resolved_model,
+                        "instructions": self._resolved_instructions,
+                        "name": "rag_surreal_db_pydantic_ai_demo",
+                        "model_settings": self._model_settings,
+                    }
+                    init_params = inspect.signature(Agent.__init__).parameters
+                    if "retries" in init_params:
+                        fallback_agent_kwargs["retries"] = 0
+                    if "output_retries" in init_params:
+                        fallback_agent_kwargs["output_retries"] = 0
+                    fallback_agent = Agent(**fallback_agent_kwargs)
+                    result = await superoptix_run_agent_with_optional_rlm(
+                        agent=fallback_agent,
+                        prompt=prompt,
+                        spec_data=FULL_SPEC,
+                        model_name=self._resolved_model,
+                        logfire_enabled=bool((FULL_SPEC.get("logfire", {}) or {}).get("enabled", True)),
+                    )
+                except Exception as fallback_exc:
+                    fb_err = str(fallback_exc)
+                    print(f"⚠️ Fallback run also failed: {fb_err}")
+                    return {"retrieved_response": f"Unable to complete request due to model validation error: {fb_err}"}
+            else:
+                raise
+        elapsed_ms = int((time.time() - started) * 1000)
+        print(f"✅ Pydantic AI run done ({elapsed_ms}ms)")
+        try:
+            if isinstance(result, str):
+                output = result
+            elif hasattr(result, "messages"):
+                tool_calls = [
+                    msg for msg in result.messages
+                    if hasattr(msg, "tool_calls") and getattr(msg, "tool_calls")
+                ]
+                if tool_calls:
+                    print(f"🔧 Tool calls: {len(tool_calls)}")
+        except Exception:
+            pass
+
+        if not isinstance(result, str):
+            output = result.output
+
+        if isinstance(output, BaseModel):
+            return output.model_dump()
+
+        text = str(output)
+        out: Dict[str, Any] = {"retrieved_response": text}
+        return out
+
+
+if __name__ == "__main__":
+    async def _main() -> None:
+        pipeline = RagSurrealdbPydanticaiDemoPipeline()
+        result = await pipeline.run(query="Hello")
+        print(result)
+
+    import asyncio
+
+    asyncio.run(_main())

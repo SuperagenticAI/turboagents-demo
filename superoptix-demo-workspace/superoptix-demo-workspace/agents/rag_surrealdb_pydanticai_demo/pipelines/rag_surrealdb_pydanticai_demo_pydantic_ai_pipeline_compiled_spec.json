@@ -1,0 +1,105 @@
+{
+  "feature_specifications": {
+    "scenarios": [
+      {
+        "description": "Ensure retrieval includes seeded demo token.",
+        "expected_output": {
+          "retrieved_response": "token retrieval success"
+        },
+        "input": {
+          "knowledge_query": "What is NEON-FOX-742?"
+        },
+        "name": "token_retrieval"
+      }
+    ]
+  },
+  "input_fields": [
+    {
+      "default_repr": "None",
+      "description": "Query to answer using retrieved SurrealDB context.",
+      "dspy_type": "str",
+      "has_default": false,
+      "name": "knowledge_query",
+      "required": true,
+      "type": "str"
+    }
+  ],
+  "language_model": {
+    "api_base": "http://localhost:11434",
+    "location": "local",
+    "max_tokens": 1800,
+    "model": "qwen3.5:9b",
+    "provider": "ollama",
+    "temperature": 0.2
+  },
+  "output_fields": [
+    {
+      "default_repr": "None",
+      "description": "Response grounded in retrieved knowledge.",
+      "dspy_type": "str",
+      "has_default": false,
+      "name": "retrieved_response",
+      "required": true,
+      "type": "str"
+    }
+  ],
+  "persona": {
+    "backstory": "",
+    "goal": "Retrieve relevant context from SurrealDB and answer clearly.",
+    "instructions": "",
+    "name": "surreal_db_pydantic_ai_assistant",
+    "role": "SurrealDB RAG Assistant",
+    "traits": [
+      "grounded",
+      "concise",
+      "practical"
+    ]
+  },
+  "rag": {
+    "config": {
+      "chunk_overlap": 50,
+      "chunk_size": 512,
+      "similarity_threshold": 0.65,
+      "top_k": 5
+    },
+    "enabled": true,
+    "retriever_type": "turboagents-surrealdb",
+    "vector_store": {
+      "bits": 3.5,
+      "content_field": "content",
+      "database": "knowledge",
+      "embedding_dimension": 64,
+      "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+      "metadata_field": "metadata",
+      "namespace": "superoptix",
+      "password": "secret",
+      "rerank_top": 16,
+      "skip_signin": false,
+      "table_name": "rag_documents",
+      "url": "ws://localhost:8000",
+      "username": "root",
+      "vector_field": "embedding"
+    }
+  },
+  "tasks": [
+    {
+      "inputs": [
+        {
+          "description": "User query",
+          "name": "knowledge_query",
+          "required": true,
+          "type": "str"
+        }
+      ],
+      "instruction": "Use retrieval-augmented generation with SurrealDB context first, then answer the user query clearly and accurately.\n",
+      "name": "knowledge_retrieval",
+      "outputs": [
+        {
+          "description": "Final grounded answer",
+          "name": "retrieved_response",
+          "type": "str"
+        }
+      ]
+    }
+  ]
+}
