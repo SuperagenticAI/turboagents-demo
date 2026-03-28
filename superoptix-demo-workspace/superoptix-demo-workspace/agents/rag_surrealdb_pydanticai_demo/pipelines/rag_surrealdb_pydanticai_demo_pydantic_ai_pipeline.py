@@ -3,7 +3,7 @@ RagSurrealdbPydanticaiDemo Agent - Pydantic AI Native Minimal Pipeline
 
 Auto-generated from SuperSpec playbook using SuperOptiX compiler.
 Framework: Pydantic AI
-Generated: 2026-03-28 13:36:23
+Generated: 2026-03-28 13:40:49
 """
 
 from __future__ import annotations

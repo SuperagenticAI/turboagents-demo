@@ -19,6 +19,10 @@ That is better than generating it on demand because:
 - the repo works as a public reference implementation, not just a generator
 - the runner script can stay focused on execution and summary output
 
+The checked-in `superoptix-demo-workspace/` directory is there for inspection. It gives people a concrete reference for generated SuperOptiX code.
+
+Runtime execution does not reuse that folder. The demo runner creates a separate `superoptix-demo-runtime/` workspace so local runs do not overwrite the reference output.
+
 ## Prerequisites
 
 Before running this demo, make sure these local services are up:
@@ -61,6 +65,8 @@ This will bootstrap a local SuperOptiX workspace inside this repo, pull the pack
 - DSPy
 - Pydantic AI
 - OpenAI Agents SDK
+
+That runtime workspace is created under `superoptix-demo-runtime/`. The checked-in `superoptix-demo-workspace/` folder stays untouched so people can inspect the generated code separately.
 
 ## Links
 

@@ -3,7 +3,7 @@ RagSurrealdbOpenaiDemo Agent - OpenAI Agents SDK Minimal Pipeline
 
 Auto-generated from SuperSpec playbook using SuperOptiX compiler.
 Framework: OpenAI Agents SDK
-Generated: 2026-03-28 13:36:52
+Generated: 2026-03-28 13:41:13
 """
 
 from __future__ import annotations

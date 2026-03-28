@@ -12,7 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = ROOT / "results"
 SUMMARY = RESULTS_DIR / "summary.md"
-WORKSPACE = ROOT / "superoptix-demo-workspace"
+REFERENCE_WORKSPACE = ROOT / "superoptix-demo-workspace"
+WORKSPACE = ROOT / "superoptix-demo-runtime"
 SUPER_BIN = ROOT / ".venv" / "bin" / "super"
 PROJECT_PACKAGE_ROOT = WORKSPACE / WORKSPACE.name
 
@@ -146,6 +147,8 @@ def ensure_workspace() -> None:
         proc = run_cmd([str(SUPER_BIN), "init", WORKSPACE.name], cwd=ROOT, stream=True)
         if proc.returncode != 0:
             raise RuntimeError((proc.stdout or "") + (proc.stderr or ""))
+    if REFERENCE_WORKSPACE.exists():
+        log(f"Reference generated code remains available in {REFERENCE_WORKSPACE.name}")
 
 
 def ensure_agent(agent_name: str, framework: str) -> None:
