@@ -6,7 +6,7 @@ A small standalone demo repo for trying TurboAgents outside the main source tree
 
 - standalone TurboAgents with LanceDB
 - standalone TurboAgents with SurrealDB
-- optional SuperOptiX framework integrations using the local validation workspace
+- optional SuperOptiX framework integrations using an existing local validation workspace
 
 ## Why the demo scripts are committed
 
@@ -22,7 +22,8 @@ That is better than generating it on demand because:
 ## Quick start
 
 ```bash
-cd /Users/shashi/oss/turboagents-demo
+git clone https://github.com/SuperagenticAI/turboagents-demo.git
+cd turboagents-demo
 uv sync
 uv run python scripts/run_demo.py
 ```
@@ -31,9 +32,12 @@ That runs the standalone LanceDB and SurrealDB demos and writes a summary to `re
 
 ## Optional SuperOptiX integrations
 
-If you already have the local SuperOptiX validation setup used during launch prep, run:
+If you already have a local SuperOptiX source checkout and validation workspace, run:
 
 ```bash
+export SUPEROPTIX_ROOT=/path/to/superoptix
+export TURBOAGENTS_ROOT=/path/to/turboagents
+export SUPEROPTIX_VALIDATION_ROOT=/path/to/superoptix-validation
 uv run python scripts/run_demo.py --with-superoptix
 ```
 
@@ -43,11 +47,11 @@ This will also run:
 - Pydantic AI
 - OpenAI Agents SDK
 
-using these default local paths:
+Required environment variables for `--with-superoptix`:
 
-- `SUPEROPTIX_ROOT=/Users/shashi/superagentic/superoptix`
-- `TURBOAGENTS_ROOT=/Users/shashi/oss/turboagents`
-- `SUPEROPTIX_VALIDATION_ROOT=/tmp/superoptix-turbo-validation`
+- `SUPEROPTIX_ROOT`
+- `TURBOAGENTS_ROOT`
+- `SUPEROPTIX_VALIDATION_ROOT`
 
 ## Links
 

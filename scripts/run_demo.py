@@ -44,6 +44,15 @@ def line_for_output(output: str) -> str:
     return lines[-1] if lines else "no output"
 
 
+def require_env_path(name: str) -> Path:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise RuntimeError(
+            f"Missing required environment variable {name}. Set it before using --with-superoptix."
+        )
+    return Path(value).expanduser().resolve()
+
+
 def run_standalone(label: str, script_name: str) -> tuple[bool, str]:
     log(f"Running {label} via demo/{script_name}")
     proc = run_cmd([sys.executable, str(ROOT / "demo" / script_name)])
@@ -55,9 +64,9 @@ def run_standalone(label: str, script_name: str) -> tuple[bool, str]:
 
 
 def run_superoptix(label: str, agent_name: str, framework: str) -> tuple[bool, str]:
-    superoptix_root = Path(os.environ.get("SUPEROPTIX_ROOT", "/Users/shashi/superagentic/superoptix"))
-    turboagents_root = Path(os.environ.get("TURBOAGENTS_ROOT", "/Users/shashi/oss/turboagents"))
-    validation_root = Path(os.environ.get("SUPEROPTIX_VALIDATION_ROOT", "/tmp/superoptix-turbo-validation"))
+    superoptix_root = require_env_path("SUPEROPTIX_ROOT")
+    turboagents_root = require_env_path("TURBOAGENTS_ROOT")
+    validation_root = require_env_path("SUPEROPTIX_VALIDATION_ROOT")
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{superoptix_root}:{turboagents_root}"
     python = superoptix_root / ".venv" / "bin" / "python"
